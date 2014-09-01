@@ -55,6 +55,15 @@ class Captcha
     const VERIFY_SERVER = 'www.google.com';
 
     /**
+     * The communication library that will be used to
+     * communicate with Recaptcha Server.
+     * Available option: curl, socket
+     *
+     * @var string
+     */
+    protected $commLib = 'curl';
+
+    /**
      * The Remote IP Address
      *
      * @var string
@@ -102,6 +111,29 @@ class Captcha
         'blackglass',
         'clean'
     );
+
+    /**
+     * Set communication library. $commLib may
+     * "curl" or "socket"
+     *
+     * @param string $commLib
+     * @return reCaptcha
+     */
+    public function setCommunicationLib($commLib)
+    {
+        $this->commLib = $commLib;
+        return $this;
+    }
+
+    /**
+     * Retrieve currently set public key
+     *
+     * @return string
+     */
+    public function geCommunicationLib()
+    {
+        return $this->commLib;
+    }
 
     /**
      * Set public key
@@ -278,12 +310,49 @@ class Captcha
 
     /**
      * Make a signed validation request to reCaptcha's servers
+     * with specified communication library
      *
      * @throws Exception
      * @param array $parameters
      * @return string
      */
     protected function process($parameters)
+    {
+        switch ($this->commLib) {
+            case 'curl':
+                return $this->process_curl($parameters);
+                break;
+            case 'socket':
+                return $this->process_socket($parameters);
+                break;
+            default:
+                throw new Exception('Unknown communication library!');
+        }
+    }
+
+    protected function process_curl($parameters)
+    {
+        // Properly encode parameters
+        $parameters = $this->encode($parameters);
+
+        $hdr['User-Agent'] = "reCAPTCHA/PHP5";
+
+        $ch = curl_init(); 
+        curl_setopt($ch, CURLOPT_URL, "http://www.google.com/recaptcha/api/verify"); 
+        curl_setopt($ch, CURLOPT_HEADER, TRUE); 
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE); 
+        curl_setopt($ch, CURLOPT_HEADER, $hdr); 
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $parameters);
+
+        $response = curl_exec($ch); 
+
+        curl_close($ch);
+
+        return explode("\r\n\r\n", $response, 2);
+    }
+
+    protected function process_socket($parameters)
     {
         // Properly encode parameters
         $parameters = $this->encode($parameters);
