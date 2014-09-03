@@ -61,7 +61,14 @@ class Captcha
      *
      * @var string
      */
-    protected $commLib = 'curl';
+    protected $connType = 'socket';
+
+    /**
+    * Available connection library to communicate
+    * with Google reCaptcha server
+    * @var string[]
+    */
+    protected static $validConnType = array('socket', 'curl');
 
     /**
      * The Remote IP Address
@@ -113,26 +120,29 @@ class Captcha
     );
 
     /**
-     * Set communication library. $commLib may
+     * Set communication library. $connLib may
      * "curl" or "socket"
      *
-     * @param string $commLib
+     * @param string $connLib
      * @return reCaptcha
      */
-    public function setCommunicationLib($commLib)
+    public function setConnectionType($connType)
     {
-        $this->commLib = $commLib;
+        if ( ! in_array($connType, self::$validConnType) ) {
+            throw new Exception('Invalid connection type. Set curl or socket');
+        }
+        $this->connType = $connType;
         return $this;
     }
 
     /**
-     * Retrieve currently set public key
+     * Retrieve currently set connection type
      *
      * @return string
      */
-    public function geCommunicationLib()
+    public function getConnectionType()
     {
-        return $this->commLib;
+        return $this->connType;
     }
 
     /**
@@ -318,27 +328,34 @@ class Captcha
      */
     protected function process($parameters)
     {
-        switch ($this->commLib) {
+        switch ($this->connType) {
             case 'curl':
-                return $this->process_curl($parameters);
+                return $this->processCurl($parameters);
                 break;
             case 'socket':
-                return $this->process_socket($parameters);
+                return $this->processSocket($parameters);
                 break;
-            default:
-                throw new Exception('Unknown communication library!');
         }
     }
 
-    protected function process_curl($parameters)
+    /**
+     * Make a signed validation request to reCaptcha's servers
+     * with curl
+     *
+     * @throws Exception
+     * @param array $parameters
+     * @return string
+     */
+    protected function processCurl($parameters)
     {
         // Properly encode parameters
         $parameters = $this->encode($parameters);
 
-        $hdr['User-Agent'] = "reCAPTCHA/PHP5";
+        $hdr = array();
+        $hdr['User-Agent'] = 'reCAPTCHA/PHP5';
 
         $ch = curl_init(); 
-        curl_setopt($ch, CURLOPT_URL, "http://www.google.com/recaptcha/api/verify"); 
+        curl_setopt($ch, CURLOPT_URL, 'http://' . self::VERIFY_SERVER . '/recaptcha/api/verify'); 
         curl_setopt($ch, CURLOPT_HEADER, TRUE); 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE); 
         curl_setopt($ch, CURLOPT_HEADER, $hdr); 
@@ -346,13 +363,24 @@ class Captcha
         curl_setopt($ch, CURLOPT_POSTFIELDS, $parameters);
 
         $response = curl_exec($ch); 
+        if ($response === FALSE) {
+            throw new Exception('curl connection failed to: ' . self::VERIFY_SERVER);
+        }
 
         curl_close($ch);
 
         return explode("\r\n\r\n", $response, 2);
     }
 
-    protected function process_socket($parameters)
+    /**
+     * Make a signed validation request to reCaptcha's servers
+     * with socket
+     *
+     * @throws Exception
+     * @param array $parameters
+     * @return string
+     */
+    protected function processSocket($parameters)
     {
         // Properly encode parameters
         $parameters = $this->encode($parameters);
